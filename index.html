@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Neon Snake</title>
     <style>
-        :root { --bg: #020202; --grid: #111; --snake: #22c55e; --food: #ef4444; --text: #fff; }
-        * { margin: 0; padding: 0; box-sizing: border-box; touch-action: none; }
+        :root { --bg: #020202; --grid: #111; --snake: #22c55e; --food: #ef4444; --text: #fff; --pad: #1a1a1a; }
+        * { margin: 0; padding: 0; box-sizing: border-box; touch-action: none; user-select: none; -webkit-user-select: none; }
         body { 
             background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -14,34 +14,41 @@
         }
         .header { 
             display: flex; justify-content: space-between; width: 90vmin; max-width: 400px;
-            margin-bottom: 1rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+            margin-bottom: 1rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.9rem;
         }
         canvas { 
             background: var(--grid); border: 1px solid #333; box-shadow: 0 0 30px rgba(34, 197, 94, 0.15);
             border-radius: 4px;
         }
         .controls {
-            display: none; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-top: 2rem;
+            display: none; grid-template-columns: repeat(3, 80px); grid-template-rows: repeat(2, 80px); 
+            gap: 10px; margin-top: 2rem; justify-content: center;
         }
         @media (max-width: 768px) { .controls { display: grid; } }
         .d-pad { 
-            background: #1a1a1a; border: 1px solid #333; color: #666; font-size: 1.5rem;
-            width: 60px; height: 60px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
-            cursor: pointer; user-select: none;
+            background: var(--pad); border: 1px solid #333; color: #666; font-size: 2rem;
+            border-radius: 16px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; box-shadow: 0 4px 0 #000; transition: all 0.1s;
         }
-        .d-pad:active { background: var(--snake); color: var(--bg); }
-        .up { grid-column: 2; } .left { grid-column: 1; grid-row: 2; } .down { grid-column: 2; grid-row: 2; } .right { grid-column: 3; grid-row: 2; }
+        .d-pad:active { transform: translateY(4px); box-shadow: 0 0 0 #000; background: var(--snake); color: var(--bg); border-color: var(--snake); }
+        .up { grid-column: 2; grid-row: 1; } 
+        .left { grid-column: 1; grid-row: 2; } 
+        .down { grid-column: 2; grid-row: 2; } 
+        .right { grid-column: 3; grid-row: 2; }
+
         .overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8); display: flex; flex-direction: column;
-            align-items: center; justify-content: center; z-index: 10;
+            background: rgba(0,0,0,0.85); display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 10; backdrop-filter: blur(4px);
         }
         .overlay.hidden { display: none; }
+        .overlay h1 { font-size: 3rem; font-weight: 800; letter-spacing: -0.05em; margin-bottom: 1rem; text-align: center; }
         .btn { 
-            background: var(--snake); color: var(--bg); border: none; padding: 1rem 2rem;
-            font-weight: 700; font-size: 1rem; cursor: pointer; margin-top: 1rem;
-            text-transform: uppercase; letter-spacing: 0.1em;
+            background: var(--snake); color: var(--bg); border: none; padding: 1rem 3rem;
+            font-weight: 700; font-size: 1rem; cursor: pointer; margin-top: 2rem;
+            text-transform: uppercase; letter-spacing: 0.1em; border-radius: 4px;
         }
+        .btn:active { transform: scale(0.95); }
     </style>
 </head>
 <body>
@@ -60,7 +67,7 @@
 
     <div class="overlay" id="startScreen">
         <h1>NEON SNAKE</h1>
-        <p style="color:#888; margin-top:0.5rem">Use Arrow Keys or D-Pad</p>
+        <p style="color:#888; font-size: 0.9rem;">Use Arrow Keys or D-Pad</p>
         <button class="btn" onclick="game.start()">Start Game</button>
     </div>
 
@@ -73,8 +80,6 @@
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        
-        // Responsive Grid
         const gridSize = 20;
         let tileCount = 20;
         
@@ -94,15 +99,18 @@
             score: 0,
             highScore: localStorage.getItem('snake_high') || 0,
             loop: null,
-            speed: 100,
 
             init() {
                 document.getElementById('highScore').textContent = this.highScore;
-                document.addEventListener('keydown', this.handleInput.bind(this));
+                document.addEventListener('keydown', (e) => this.handleInput(e.key));
                 document.querySelectorAll('.d-pad').forEach(btn => {
                     btn.addEventListener('touchstart', (e) => {
                         e.preventDefault();
-                        this.handleInput({ key: btn.dataset.dir });
+                        this.handleInput(btn.dataset.dir);
+                    });
+                    btn.addEventListener('mousedown', (e) => {
+                        e.preventDefault();
+                        this.handleInput(btn.dataset.dir);
                     });
                 });
             },
@@ -110,7 +118,7 @@
             start() {
                 document.getElementById('startScreen').classList.add('hidden');
                 this.dx = 1; this.dy = 0;
-                this.loop = setInterval(this.update.bind(this), this.speed);
+                this.loop = setInterval(this.update.bind(this), 100);
             },
 
             reset() {
@@ -125,16 +133,9 @@
 
             update() {
                 const head = { x: this.snake[0].x + this.dx, y: this.snake[0].y + this.dy };
-
-                // Wall Collision
                 if (head.x < 0 || head.x >= tileCount || head.y < 0 || head.y >= tileCount) return this.gameOver();
-                
-                // Self Collision
                 if (this.snake.some(s => s.x === head.x && s.y === head.y)) return this.gameOver();
-
                 this.snake.unshift(head);
-
-                // Eat Food
                 if (head.x === this.food.x && head.y === this.food.y) {
                     this.score += 10;
                     this.updateScore();
@@ -142,20 +143,13 @@
                 } else {
                     this.snake.pop();
                 }
-
                 this.draw();
             },
 
             draw() {
-                // Clear
                 ctx.fillStyle = '#020202'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-                
-                // Draw Food
-                ctx.fillStyle = '#ef4444'; 
-                ctx.shadowBlur = 15; ctx.shadowColor = '#ef4444';
+                ctx.fillStyle = '#ef4444'; ctx.shadowBlur = 15; ctx.shadowColor = '#ef4444';
                 ctx.fillRect(this.food.x * gridSize + 1, this.food.y * gridSize + 1, gridSize - 2, gridSize - 2);
-                
-                // Draw Snake
                 ctx.fillStyle = '#22c55e'; ctx.shadowColor = '#22c55e';
                 this.snake.forEach((s, i) => {
                     ctx.shadowBlur = i === 0 ? 20 : 0;
@@ -172,12 +166,12 @@
                 if (this.snake.some(s => s.x === this.food.x && s.y === this.food.y)) this.placeFood();
             },
 
-            handleInput(e) {
-                const key = e.key.replace('Arrow', '').toLowerCase();
-                if ((key === 'up' || key === 'w') && this.dy === 0) { this.dx = 0; this.dy = -1; }
-                if ((key === 'down' || key === 's') && this.dy === 0) { this.dx = 0; this.dy = 1; }
-                if ((key === 'left' || key === 'a') && this.dx === 0) { this.dx = -1; this.dy = 0; }
-                if ((key === 'right' || key === 'd') && this.dx === 0) { this.dx = 1; this.dy = 0; }
+            handleInput(key) {
+                const dir = key.replace('Arrow', '').toLowerCase();
+                if ((dir === 'up' || dir === 'w') && this.dy === 0) { this.dx = 0; this.dy = -1; }
+                if ((dir === 'down' || dir === 's') && this.dy === 0) { this.dx = 0; this.dy = 1; }
+                if ((dir === 'left' || dir === 'a') && this.dx === 0) { this.dx = -1; this.dy = 0; }
+                if ((dir === 'right' || dir === 'd') && this.dx === 0) { this.dx = 1; this.dy = 0; }
             },
 
             updateScore() {
