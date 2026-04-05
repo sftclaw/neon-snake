@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Snake</title>
+    <style>
+        :root { --bg: #020202; --grid: #111; --snake: #22c55e; --food: #ef4444; --text: #fff; }
+        * { margin: 0; padding: 0; box-sizing: border-box; touch-action: none; }
+        body { 
+            background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 100vh; overflow: hidden;
+        }
+        .header { 
+            display: flex; justify-content: space-between; width: 90vmin; max-width: 400px;
+            margin-bottom: 1rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+        }
+        canvas { 
+            background: var(--grid); border: 1px solid #333; box-shadow: 0 0 30px rgba(34, 197, 94, 0.15);
+            border-radius: 4px;
+        }
+        .controls {
+            display: none; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-top: 2rem;
+        }
+        @media (max-width: 768px) { .controls { display: grid; } }
+        .d-pad { 
+            background: #1a1a1a; border: 1px solid #333; color: #666; font-size: 1.5rem;
+            width: 60px; height: 60px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; user-select: none;
+        }
+        .d-pad:active { background: var(--snake); color: var(--bg); }
+        .up { grid-column: 2; } .left { grid-column: 1; grid-row: 2; } .down { grid-column: 2; grid-row: 2; } .right { grid-column: 3; grid-row: 2; }
+        .overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 10;
+        }
+        .overlay.hidden { display: none; }
+        .btn { 
+            background: var(--snake); color: var(--bg); border: none; padding: 1rem 2rem;
+            font-weight: 700; font-size: 1rem; cursor: pointer; margin-top: 1rem;
+            text-transform: uppercase; letter-spacing: 0.1em;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>Score: <span id="score">0</span></div>
+        <div>High: <span id="highScore">0</span></div>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    
+    <div class="controls">
+        <div class="d-pad up" data-dir="up">▲</div>
+        <div class="d-pad left" data-dir="left">◀</div>
+        <div class="d-pad down" data-dir="down">▼</div>
+        <div class="d-pad right" data-dir="right">▶</div>
+    </div>
+
+    <div class="overlay" id="startScreen">
+        <h1>NEON SNAKE</h1>
+        <p style="color:#888; margin-top:0.5rem">Use Arrow Keys or D-Pad</p>
+        <button class="btn" onclick="game.start()">Start Game</button>
+    </div>
+
+    <div class="overlay hidden" id="gameOverScreen">
+        <h1 style="color:var(--food)">GAME OVER</h1>
+        <p style="font-size:2rem; font-weight:700" id="finalScore">0</p>
+        <button class="btn" onclick="game.reset()">Play Again</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Responsive Grid
+        const gridSize = 20;
+        let tileCount = 20;
+        
+        function resize() {
+            const size = Math.min(window.innerWidth - 32, 400);
+            canvas.width = size;
+            canvas.height = size;
+            tileCount = Math.floor(size / gridSize);
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        const game = {
+            snake: [{x: 10, y: 10}],
+            food: {x: 15, y: 15},
+            dx: 0, dy: 0,
+            score: 0,
+            highScore: localStorage.getItem('snake_high') || 0,
+            loop: null,
+            speed: 100,
+
+            init() {
+                document.getElementById('highScore').textContent = this.highScore;
+                document.addEventListener('keydown', this.handleInput.bind(this));
+                document.querySelectorAll('.d-pad').forEach(btn => {
+                    btn.addEventListener('touchstart', (e) => {
+                        e.preventDefault();
+                        this.handleInput({ key: btn.dataset.dir });
+                    });
+                });
+            },
+
+            start() {
+                document.getElementById('startScreen').classList.add('hidden');
+                this.dx = 1; this.dy = 0;
+                this.loop = setInterval(this.update.bind(this), this.speed);
+            },
+
+            reset() {
+                clearInterval(this.loop);
+                this.snake = [{x: 10, y: 10}];
+                this.score = 0;
+                this.dx = 1; this.dy = 0;
+                this.updateScore();
+                document.getElementById('gameOverScreen').classList.add('hidden');
+                this.start();
+            },
+
+            update() {
+                const head = { x: this.snake[0].x + this.dx, y: this.snake[0].y + this.dy };
+
+                // Wall Collision
+                if (head.x < 0 || head.x >= tileCount || head.y < 0 || head.y >= tileCount) return this.gameOver();
+                
+                // Self Collision
+                if (this.snake.some(s => s.x === head.x && s.y === head.y)) return this.gameOver();
+
+                this.snake.unshift(head);
+
+                // Eat Food
+                if (head.x === this.food.x && head.y === this.food.y) {
+                    this.score += 10;
+                    this.updateScore();
+                    this.placeFood();
+                } else {
+                    this.snake.pop();
+                }
+
+                this.draw();
+            },
+
+            draw() {
+                // Clear
+                ctx.fillStyle = '#020202'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Draw Food
+                ctx.fillStyle = '#ef4444'; 
+                ctx.shadowBlur = 15; ctx.shadowColor = '#ef4444';
+                ctx.fillRect(this.food.x * gridSize + 1, this.food.y * gridSize + 1, gridSize - 2, gridSize - 2);
+                
+                // Draw Snake
+                ctx.fillStyle = '#22c55e'; ctx.shadowColor = '#22c55e';
+                this.snake.forEach((s, i) => {
+                    ctx.shadowBlur = i === 0 ? 20 : 0;
+                    ctx.fillRect(s.x * gridSize + 1, s.y * gridSize + 1, gridSize - 2, gridSize - 2);
+                });
+                ctx.shadowBlur = 0;
+            },
+
+            placeFood() {
+                this.food = {
+                    x: Math.floor(Math.random() * tileCount),
+                    y: Math.floor(Math.random() * tileCount)
+                };
+                if (this.snake.some(s => s.x === this.food.x && s.y === this.food.y)) this.placeFood();
+            },
+
+            handleInput(e) {
+                const key = e.key.replace('Arrow', '').toLowerCase();
+                if ((key === 'up' || key === 'w') && this.dy === 0) { this.dx = 0; this.dy = -1; }
+                if ((key === 'down' || key === 's') && this.dy === 0) { this.dx = 0; this.dy = 1; }
+                if ((key === 'left' || key === 'a') && this.dx === 0) { this.dx = -1; this.dy = 0; }
+                if ((key === 'right' || key === 'd') && this.dx === 0) { this.dx = 1; this.dy = 0; }
+            },
+
+            updateScore() {
+                document.getElementById('score').textContent = this.score;
+                if (this.score > this.highScore) {
+                    this.highScore = this.score;
+                    localStorage.setItem('snake_high', this.highScore);
+                    document.getElementById('highScore').textContent = this.highScore;
+                }
+            },
+
+            gameOver() {
+                clearInterval(this.loop);
+                document.getElementById('finalScore').textContent = this.score;
+                document.getElementById('gameOverScreen').classList.remove('hidden');
+            }
+        };
+
+        game.init();
+    </script>
+</body>
+</html>
