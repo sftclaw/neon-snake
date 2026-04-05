@@ -18,23 +18,25 @@
         }
         canvas { 
             background: var(--grid); border: 1px solid #333; box-shadow: 0 0 30px rgba(34, 197, 94, 0.15);
-            border-radius: 4px;
+            border-radius: 4px; display: block;
         }
         .controls {
-            display: none; grid-template-columns: repeat(3, 80px); grid-template-rows: repeat(2, 80px); 
-            gap: 10px; margin-top: 2rem; justify-content: center;
+            display: none; width: 260px; height: 170px; position: relative; margin-top: 2rem;
         }
-        @media (max-width: 768px) { .controls { display: grid; } }
+        @media (max-width: 768px) { .controls { display: block; } }
+        
         .d-pad { 
-            background: var(--pad); border: 1px solid #333; color: #666; font-size: 2rem;
-            border-radius: 16px; display: flex; align-items: center; justify-content: center;
-            cursor: pointer; box-shadow: 0 4px 0 #000; transition: all 0.1s;
+            position: absolute; background: var(--pad); border: 1px solid #333; color: #666; 
+            font-size: 1.5rem; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; box-shadow: 0 4px 0 #000; transition: all 0.05s; width: 80px; height: 80px;
         }
-        .d-pad:active { transform: translateY(4px); box-shadow: 0 0 0 #000; background: var(--snake); color: var(--bg); border-color: var(--snake); }
-        .up { grid-column: 2; grid-row: 1; } 
-        .left { grid-column: 1; grid-row: 2; } 
-        .down { grid-column: 2; grid-row: 2; } 
-        .right { grid-column: 3; grid-row: 2; }
+        .d-pad:active { transform: translateY(4px); box-shadow: 0 0 0 #000; background: var(--snake); color: var(--bg); }
+        
+        /* Cross Layout */
+        .up { top: 0; left: 90px; }
+        .down { bottom: 0; left: 90px; }
+        .left { top: 90px; left: 0; }
+        .right { top: 90px; right: 0; }
 
         .overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -48,7 +50,6 @@
             font-weight: 700; font-size: 1rem; cursor: pointer; margin-top: 2rem;
             text-transform: uppercase; letter-spacing: 0.1em; border-radius: 4px;
         }
-        .btn:active { transform: scale(0.95); }
     </style>
 </head>
 <body>
@@ -72,7 +73,7 @@
     </div>
 
     <div class="overlay hidden" id="gameOverScreen">
-        <h1 style="color:var(--food)">GAME OVER</h1>
+        <h1 style="color:#ef4444">GAME OVER</h1>
         <p style="font-size:2rem; font-weight:700" id="finalScore">0</p>
         <button class="btn" onclick="game.reset()">Play Again</button>
     </div>
@@ -96,6 +97,7 @@
             snake: [{x: 10, y: 10}],
             food: {x: 15, y: 15},
             dx: 0, dy: 0,
+            nextDx: 0, nextDy: 0, // Input buffer
             score: 0,
             highScore: localStorage.getItem('snake_high') || 0,
             loop: null,
@@ -103,12 +105,10 @@
             init() {
                 document.getElementById('highScore').textContent = this.highScore;
                 document.addEventListener('keydown', (e) => this.handleInput(e.key));
+                
+                // Use touchstart for instant mobile response
                 document.querySelectorAll('.d-pad').forEach(btn => {
                     btn.addEventListener('touchstart', (e) => {
-                        e.preventDefault();
-                        this.handleInput(btn.dataset.dir);
-                    });
-                    btn.addEventListener('mousedown', (e) => {
                         e.preventDefault();
                         this.handleInput(btn.dataset.dir);
                     });
@@ -118,6 +118,7 @@
             start() {
                 document.getElementById('startScreen').classList.add('hidden');
                 this.dx = 1; this.dy = 0;
+                this.nextDx = 1; this.nextDy = 0;
                 this.loop = setInterval(this.update.bind(this), 100);
             },
 
@@ -126,16 +127,25 @@
                 this.snake = [{x: 10, y: 10}];
                 this.score = 0;
                 this.dx = 1; this.dy = 0;
+                this.nextDx = 1; this.nextDy = 0;
                 this.updateScore();
                 document.getElementById('gameOverScreen').classList.add('hidden');
                 this.start();
             },
 
             update() {
+                // Apply buffered input
+                this.dx = this.nextDx;
+                this.dy = this.nextDy;
+
                 const head = { x: this.snake[0].x + this.dx, y: this.snake[0].y + this.dy };
+
+                // Collision
                 if (head.x < 0 || head.x >= tileCount || head.y < 0 || head.y >= tileCount) return this.gameOver();
                 if (this.snake.some(s => s.x === head.x && s.y === head.y)) return this.gameOver();
+
                 this.snake.unshift(head);
+
                 if (head.x === this.food.x && head.y === this.food.y) {
                     this.score += 10;
                     this.updateScore();
@@ -168,10 +178,11 @@
 
             handleInput(key) {
                 const dir = key.replace('Arrow', '').toLowerCase();
-                if ((dir === 'up' || dir === 'w') && this.dy === 0) { this.dx = 0; this.dy = -1; }
-                if ((dir === 'down' || dir === 's') && this.dy === 0) { this.dx = 0; this.dy = 1; }
-                if ((dir === 'left' || dir === 'a') && this.dx === 0) { this.dx = -1; this.dy = 0; }
-                if ((dir === 'right' || dir === 'd') && this.dx === 0) { this.dx = 1; this.dy = 0; }
+                // Prevent 180 degree turns on the current axis
+                if ((dir === 'up' || dir === 'w') && this.dy === 0) { this.nextDx = 0; this.nextDy = -1; }
+                if ((dir === 'down' || dir === 's') && this.dy === 0) { this.nextDx = 0; this.nextDy = 1; }
+                if ((dir === 'left' || dir === 'a') && this.dx === 0) { this.nextDx = -1; this.nextDy = 0; }
+                if ((dir === 'right' || dir === 'd') && this.dx === 0) { this.nextDx = 1; this.nextDy = 0; }
             },
 
             updateScore() {
